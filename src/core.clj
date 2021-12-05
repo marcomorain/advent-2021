@@ -176,8 +176,63 @@
 
 ;; ex4 -> 4512
 ;; day4 -> 82440
-
 (let [{:keys [draws boards]} (load-bingo "input/day4")
       wins (sort-by (comp count :call) (map (partial play-bingo draws) boards))]
   {:best (-> wins first score-bingo)
    :worst (-> wins last score-bingo)})
+
+
+
+
+(defn print-diagram [diagram]
+  (doseq [y (range 10)
+          x (range 10)]
+    (printf "%s" (get diagram [x y] "."))
+    (when (= x 9)
+      (println)))
+  diagram)
+
+;; Day 5
+
+(defn between [a b]
+  (cond
+    (= a b) (repeat a)
+    (< a b)
+    (range a (inc b))
+    :else
+    (reverse (range b (inc a)))))
+
+(is (= [1 1 1] (take 3 (between 1 1))))
+(is (= [3 4 5] (between 3 5)))
+(is (= [7 6 5 4 3 2] (between 7 2)))
+
+(defn zip [& colls]
+  (apply map vector colls))
+
+(is (= [[1 :a "a"] [2 :b "b"] [3 :c "c"]]
+       (zip [1 2 3] [:a :b :c] ["a" "b" "c"])))
+
+(defn parse-vent [s]
+  (let [[x1 y1 x2 y2] (->> s
+                           (re-matches #"(\d+),(\d+) -> (\d+),(\d+)")
+                           (rest)
+                           (map parse-long))]
+    (zip (between x1 x2)
+         (between y1 y2))))
+
+(are [vent points] (= points (parse-vent vent))
+  "1,1 -> 1,3" [[1,1] [1,2] [1,3]]
+  "9,7 -> 7,7" [[9,7] [8,7] [7,7]]
+  "1,1 -> 3,3" [[1,1] [2,2] [3,3]]
+  "9,7 -> 7,9" [[9,7] [8,8] [7,9]])
+
+(defn vent->diagram [diagram vent]
+  (update diagram vent (fnil inc 0)))
+
+(->> "input/day5"
+     (lines)
+     (mapcat parse-vent)
+     (reduce vent->diagram {})
+     (print-diagram)
+     (filter (comp (partial < 1) val))
+     (count))
