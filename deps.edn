@@ -1,0 +1,7 @@
+{:deps {
+        org.clojure/clojure {:mvn/version "1.11.0-alpha3"}
+        org.clojure/data.csv {:mvn/version "0.1.4"}
+        com.stuartsierra/frequencies {:mvn/version "0.1.0"}
+        lambdaisland/kaocha {:mvn/version "1.60.945"}
+        com.hypirion/clj-xchart {:mvn/version "0.2.0"}}
+}
