@@ -59,7 +59,9 @@
                              (if (> e 9)
                                0
                                e)))
-         assoc :flashes flashes
+         assoc
+         :flashes flashes
+         :new-flashes (count flashed-coords)
          
          
          )
@@ -74,4 +76,18 @@
       
 
 (let [grid (->coords (map digits (lines "input/ex11")))]
-  (meta (print-grid (nth (iterate simulate grid) 100))))
+  
+  (loop [grid grid
+         iterations 0]
+    (-> grid meta prn)
+    (cond
+      
+      (<= 200 iterations)
+      iterations
+
+      (= (count grid) (-> grid meta :new-flashes))
+      iterations
+
+      :else
+      (recur (simulate grid)
+             (inc iterations)))))
