@@ -43,24 +43,28 @@
   grid)
 
 
-
 (defn simulate [grid]
-  (loop [grid (update-vals grid inc)
+  (loop [flashes (get (meta grid) :flashes 0)
+         grid (update-vals grid inc)
          flashed-coords #{}]
     (let [flashing-coords (->> grid
-                           (filter (comp (partial <= 9) val))
+                           (filter (comp (partial < 9) val))
                                (keys)
                                (set))
           newly-flashing (set/difference flashing-coords flashed-coords)
           overflow (mapcat adjacents newly-flashing)]
-      (prn "newly flashing" newly-flashing)
       (if (empty? newly-flashing)
-        (update-vals grid (fn [e]
-                            (if (>= e 9)
-                              0
-                              e)
-                            ))
-        (recur (reduce (fn [g a]
+        (vary-meta
+         (update-vals grid (fn [e]
+                             (if (> e 9)
+                               0
+                               e)))
+         assoc :flashes flashes
+         
+         
+         )
+        (recur (+ flashes (count newly-flashing))
+               (reduce (fn [g a]
                          (if (contains? g a)
                            (update g a inc)
                            g))
@@ -69,6 +73,5 @@
                (set/union flashed-coords newly-flashing))))))
       
 
-
 (let [grid (->coords (map digits (lines "input/ex11")))]
-  (print-grid (simulate (print-grid (simulate (print-grid grid))))))
+  (meta (print-grid (nth (iterate simulate grid) 100))))
