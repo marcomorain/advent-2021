@@ -12,68 +12,63 @@
 (defn comma-seperated-longs [^String s]
   (mapv parse-long (s/split s #",")))
 
-;; Day 9
-
-(defn adjacent-cells [w h x y]
-  (into [] (for [[i j] [[0 1] [0 -1] [1 0] [-1 0]]
-                 :let [ax (+ x i)
-                       by (+ y j)]
-                 :when (and (nat-int? ax)
-                            (nat-int? by)
-                            (> w ax)
-                            (> h by))]
-             [ax by])))
-
-(is (= [[0 1] [1 0]])
-    (adjacent-cells 10 5 0 0))
-
-(defn lowest-adjacent-height [{:keys [width height samples]} x y]
-  (let [choices (for [[i j] (adjacent-cells width height x y)]
-                  (get samples [i j] Long/MAX_VALUE))]
-    (apply min choices)))
-
-(defn lowpoints [{:keys [samples] :as hm}]
-  (for [[[x y] h] samples
-        :when (< h (lowest-adjacent-height hm x y))]
-    {:x x
-     :y y
-     :h h
-     :risk (inc h)}))
-
-(defn heightmap [input]
-  (let [heights (map (fn [l]
-                       (map parse-long (s/split l #""))) input)
-        height (count heights)
-        width (count (first heights))]
-    {:width width
-     :height height
-     :samples (into (sorted-map) (for [y (range height)
-                                       x (range width)]
-                                   [[x y] (nth (nth heights y) x)]))}))
-
-(is (= 15
-       (reduce + (mapv :risk (lowpoints (heightmap (lines "input/ex9")))))))
-
-(is (= 496
-       (reduce + (mapv :risk (lowpoints (heightmap (lines "input/day9")))))))
-
-(defn basin-size [{:keys [width height samples] :as hm} p]
-  (loop [[x y] [(:x p) (:y p)]
-         visited #{}
-         frontier []]
-    (let [adk (adjacent-cells width height x y)
-          adk (remove #(= 9 (samples %)) adk)
-          adk (remove visited adk)
-          nf (concat frontier adk)]
-      (if (empty? nf)
-        (conj visited [x y])
-        (recur
-         (first nf)
-         (conj visited [x y])
-         (rest nf))))))
+(defn digits [s]
+  (mapv parse-long (s/split s #"")))
 
 
-(let [hm (heightmap (lines "input/day9"))
-      lp (lowpoints hm)
-      basins (map (partial basin-size hm) lp)]
-  (reduce * (take-last 3 (sort (map count basins)))))
+;; Day 11
+
+(defn ->coords [grid]
+  (into {} (for [i (range (count grid))
+                 j (range (count (nth grid 0)))]
+             [[i j] (nth (nth grid j) i)])))
+
+(defn adjacents [[x y]]
+  (for [i (range -1 2)
+        j (range -1 2)
+        :when (not (and (= 0 i)
+                        (= 0 j)))]
+    [(+ i x)
+     (+ j y)]))
+
+(adjacents [6 11])
+
+(defn print-grid [grid]
+  (doseq [j (range 0 10)]
+    (doseq [i (range 0 10)]
+      (printf "%3s" (get grid [i j] "")))
+    (println))
+  (println)
+
+  grid)
+
+
+
+(defn simulate [grid]
+  (loop [grid (update-vals grid inc)
+         flashed-coords #{}]
+    (let [flashing-coords (->> grid
+                           (filter (comp (partial <= 9) val))
+                               (keys)
+                               (set))
+          newly-flashing (set/difference flashing-coords flashed-coords)
+          overflow (mapcat adjacents newly-flashing)]
+      (prn "newly flashing" newly-flashing)
+      (if (empty? newly-flashing)
+        (update-vals grid (fn [e]
+                            (if (>= e 9)
+                              0
+                              e)
+                            ))
+        (recur (reduce (fn [g a]
+                         (if (contains? g a)
+                           (update g a inc)
+                           g))
+                       grid
+                       overflow)
+               (set/union flashed-coords newly-flashing))))))
+      
+
+
+(let [grid (->coords (map digits (lines "input/ex11")))]
+  (print-grid (simulate (print-grid (simulate (print-grid grid))))))

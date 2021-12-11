@@ -369,3 +369,195 @@
      (lines)
      (map compute)
      (reduce +))
+
+
+;; Day 9
+
+(defn adjacent-cells [w h x y]
+  (into [] (for [[i j] [[0 1] [0 -1] [1 0] [-1 0]]
+                 :let [ax (+ x i)
+                       by (+ y j)]
+                 :when (and (nat-int? ax)
+                            (nat-int? by)
+                            (> w ax)
+                            (> h by))]
+             [ax by])))
+
+(is (= [[0 1] [1 0]]
+       (adjacent-cells 10 5 0 0)))
+
+(defn lowest-adjacent-height [{:keys [width height samples]} x y]
+  (let [choices (for [[i j] (adjacent-cells width height x y)]
+                  (get samples [i j] Long/MAX_VALUE))]
+    (apply min choices)))
+
+(defn lowpoints [{:keys [samples] :as hm}]
+  (for [[[x y] h] samples
+        :when (< h (lowest-adjacent-height hm x y))]
+    {:x x
+     :y y
+     :h h
+     :risk (inc h)}))
+
+(defn heightmap [input]
+  (let [heights (map (fn [l]
+                       (map parse-long (s/split l #""))) input)
+        height (count heights)
+        width (count (first heights))]
+    {:width width
+     :height height
+     :samples (into (sorted-map) (for [y (range height)
+                                       x (range width)]
+                                   [[x y] (nth (nth heights y) x)]))}))
+
+(is (= 15
+       (reduce + (mapv :risk (lowpoints (heightmap (lines "input/ex9")))))))
+
+(is (= 496
+       (reduce + (mapv :risk (lowpoints (heightmap (lines "input/day9")))))))
+
+(defn basin-size [{:keys [width height samples] :as hm} p]
+  (loop [[x y] [(:x p) (:y p)]
+         visited #{}
+         frontier []]
+    (let [adk (adjacent-cells width height x y)
+          adk (remove #(= 9 (samples %)) adk)
+          adk (remove visited adk)
+          nf (concat frontier adk)]
+      (if (empty? nf)
+        (conj visited [x y])
+        (recur
+         (first nf)
+         (conj visited [x y])
+         (rest nf))))))
+
+
+(let [hm (heightmap (lines "input/day9"))
+      lp (lowpoints hm)
+      basins (map (partial basin-size hm) lp)]
+  (reduce * (take-last 3 (sort (map count basins)))))
+
+
+
+;; Day 10
+
+(def pairs {\( \)
+            \[ \]
+            \{ \}
+            \< \>})
+
+(defn classify [^String s]
+  (loop [[peek & input] (seq s)
+         expecting '()]
+    (case peek
+      nil
+      (if (empty? expecting)
+        {:state :valid}
+        {:state :incomplete
+         :required (apply str expecting)})
+
+      (\( \[ \{ \<)
+      (recur input (conj expecting (get pairs peek)))
+
+      (\) \] \} \>)
+      (if (= peek (first expecting))
+        (recur input (rest expecting))
+        {:state :corrupted
+         :char peek}))))
+
+
+(are [s] (= :valid (:state (classify s)))
+  "()"
+  "[]"
+  "([])"
+  "{()()()}"
+  "<([{}])>"
+  "[<>({}){}[([])<>]]"
+  "(((((((((())))))))))")
+
+(are [s] (= :corrupted (:state (classify s)))
+  "(]"
+  "{()()()>"
+  "(((()))}"
+  "<([]){()}[{}])")
+
+(is (= [:incomplete
+        :incomplete
+        :corrupted
+        :incomplete
+        :corrupted
+        :corrupted
+        :incomplete
+        :corrupted
+        :corrupted
+        :incomplete]
+       (map (comp :state classify) (lines "input/ex10"))))
+
+(def score {\) 3
+            \] 57
+            \} 1197
+            \> 25137})
+
+(defn compute [path]
+  (->> path
+       (lines)
+       (map (comp score :char classify))
+       (filter identity)
+       (reduce +)))
+
+(are [input complete] (and (= {:state :incomplete
+                               :required complete}
+                              (classify input))
+                           (= {:state :valid}
+                              (classify (str input complete))))
+
+  "[({(<(())[]>[[{[]{<()<>>" "}}]])})]"
+  "[(()[<>])]({[<{<<[]>>(" ")}>]})"
+  "(((({<>}<{<{<>}{[]{[]{}" "}}>}>))))"
+  "{<[[]]>}<{[{[{[]{()[[[]" "]]}}]}]}>"
+  "<{([{{}}[<[[[<>{}]]]>[]]" "])}>")
+
+
+
+(is (= 26397 (compute "input/ex10")))
+(is (= 392097 (compute "input/day10")))
+
+
+(defn completion-score [^String s]
+  (let [points {\) 1
+                \] 2
+                \} 3
+                \> 4}
+        scores (map points (seq s))]
+    (reduce (fn [acc score]
+              (+ score (* acc 5)))
+            0
+            scores)))
+
+(are [input score] (= score (completion-score input))
+  "}}]])})]" 288957
+  ")}>]})"  5566
+  "}}>}>))))" 1480781
+  "]]}}]}]}>" 995444
+  "])}>" 294)
+
+(defn middle [coll]
+  (let [n (/ (count coll) 2)]
+    (nth coll (long (Math/floor n)))))
+
+(is (= 7 (middle [6 7 8])))
+
+(completion-score "])}>")
+
+(defn part-2 [path]
+  (->> path
+       (lines)
+       (map classify)
+       (map :required)
+       (filter identity)
+       (map completion-score)
+       (sort)
+       (middle)))
+
+(is (= 288957 (part-2 "input/ex10")))
+(is (= 4263222782 (part-2 "input/day10")))
