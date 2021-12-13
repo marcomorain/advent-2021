@@ -4,6 +4,7 @@
    [clojure.string :as s]
    [clojure.java.io :as io]
    [clojure.set :as set]
+   [clojure.data :refer (diff)]
    [clojure.pprint :refer (pprint)]))
 
 (defn lines [path]
@@ -15,79 +16,134 @@
 (defn digits [s]
   (mapv parse-long (s/split s #"")))
 
+(defn caves [s]
+  (let [[a b] (s/split s #"-")]
+    [a b]))
 
-;; Day 11
-
-(defn ->coords [grid]
-  (into {} (for [i (range (count grid))
-                 j (range (count (nth grid 0)))]
-             [[i j] (nth (nth grid j) i)])))
-
-(defn adjacents [[x y]]
-  (for [i (range -1 2)
-        j (range -1 2)
-        :when (not (and (= 0 i)
-                        (= 0 j)))]
-    [(+ i x)
-     (+ j y)]))
-
-(adjacents [6 11])
-
-(defn print-grid [grid]
-  (doseq [j (range 0 10)]
-    (doseq [i (range 0 10)]
-      (printf "%3s" (get grid [i j] "")))
-    (println))
-  (println)
-
-  grid)
+(defn connections [acc [a b]]
+  (-> acc
+      (update a conj b)
+      (update b conj a)))
 
 
-(defn simulate [grid]
-  (loop [flashes (get (meta grid) :flashes 0)
-         grid (update-vals grid inc)
-         flashed-coords #{}]
-    (let [flashing-coords (->> grid
-                           (filter (comp (partial < 9) val))
-                               (keys)
-                               (set))
-          newly-flashing (set/difference flashing-coords flashed-coords)
-          overflow (mapcat adjacents newly-flashing)]
-      (if (empty? newly-flashing)
-        (vary-meta
-         (update-vals grid (fn [e]
-                             (if (> e 9)
-                               0
-                               e)))
-         assoc
-         :flashes flashes
-         :new-flashes (count flashed-coords)
-         
-         
-         )
-        (recur (+ flashes (count newly-flashing))
-               (reduce (fn [g a]
-                         (if (contains? g a)
-                           (update g a inc)
-                           g))
-                       grid
-                       overflow)
-               (set/union flashed-coords newly-flashing))))))
-      
+(defn small? [cave]
+  (= cave (s/lower-case cave)))
 
-(let [grid (->coords (map digits (lines "input/ex11")))]
-  
-  (loop [grid grid
-         iterations 0]
-    (-> grid meta prn)
-    (cond
-      
-      (<= 200 iterations)
-      iterations
+(is (small? "a"))
+(is (small? "ab"))
+(is (not (small? "D")))
 
-      (= (count grid) (-> grid meta :new-flashes))
-      iterations
+(defn visited? [visited cave]
+  (and (small? cave)
+       (contains? visited cave)))
 
-      :else
-      (recur (simulate grid)
-             (inc iterations)))))
+(is (not (visited? #{} "a")))
+(is (visited? #{"a"} "a"))
+(is (not (visited? #{"B"} "B")))
+
+
+(defn search* [caves start end visited path]
+  (let [at (last path)]
+    (if (= at end)
+      [path]
+      (let [next-caves (remove (partial visited? visited)
+                               (get caves at))
+            results (doall (for [next-cave next-caves]
+                             (search* caves start end
+                                      (conj visited at)
+                                      (conj path next-cave))))]
+        (apply concat (remove empty? results))))))
+
+
+;     start
+;     /   \
+; c--A-----b--d
+;     \   /
+;      end
+
+(defn search [caves start end]
+  (sort (search* caves start end #{} [start])))
+
+(defn part-1 [path]
+  (let [cave (reduce connections {} (map caves (lines path)))]
+    (count (search cave "start" "end"))))
+
+(is (= 10 (part-1 "input/ex12")))
+(is (= 19 (part-1 "input/small12")))
+(is (= 226 (part-1 "input/large12")))
+(is (= 4338 (part-1 "input/day12")))
+
+(defn can-visit? [visited cave]
+  (cond
+    (= "start" cave) false
+    (not (small? cave)) true
+    :else
+    (let [visits (get visited cave 0)]
+      (if (zero? visits)
+        true
+        (= 1 (->> visited vals sort last))))))
+
+(are [visited cave] (can-visit? visited cave)
+  {} "a"
+  {} "end"
+  {"a" 1} "a"
+  {"a" 1 "b" 1} "a"
+  {"a" 1 "b" 2} "c"
+  {"A" 3} "A"
+  {"start" 1 "b" 1} "b")
+
+(are [visited cave] (not (can-visit? visited cave))
+  {} "start"
+  {"a" 1 "b" 2} "a"
+  {"a" 1 "b" 2} "b"
+  {"a" 1 "b" 1 "c" 2} "c"
+  {"start" 1, "dc" 2, "kj" 1} "kj")
+
+(defn record-visit [visited cave]
+  (if (small? cave)
+    (update visited cave (fnil inc 0))
+    visited))
+
+(are [before cave after] (= after (record-visit before cave))
+  {} "a" {"a" 1}
+  {"a" 1} "a" {"a" 2}
+  {"b" 1} "a" {"a" 1 "b" 1}
+  {} "B" {})
+
+
+(defn search2* [caves start end visited path]
+  (let [at (last path)]
+    (if (= at end)
+      [path]
+      (let [next-visited (record-visit visited at)
+            next-caves (filter (partial can-visit? next-visited)
+                               (get caves at))
+            results (doall (for [next-cave next-caves]
+                             (search2* caves start end
+                                       next-visited
+                                       (conj path next-cave))))]
+        (apply concat (remove empty? results))))))
+
+
+;     start
+;     /   \
+; c--A-----b--d
+;     \   /
+;      end
+
+; start,A,b,A,c,A,b,A,end
+
+(defn search2 [caves start end]
+  (search2* caves start end {} [start]))
+
+(defn part-2 [path]
+  (let [cave (reduce connections {} (map caves (lines path)))]
+    (search2 cave "start" "end")))
+
+
+
+(are [expected path] (= expected (count (part-2 path)))
+  36  "input/ex12"
+  103  "input/small12"
+  3509  "input/large12"
+  4338  "input/day12")
